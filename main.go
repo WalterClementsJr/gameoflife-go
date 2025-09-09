@@ -35,17 +35,16 @@ func (game *Game) init() {
 	game.screenW = ScreenW
 	game.screenH = ScreenH
 	game.pixelSize = SquareSize
+
 	game.fps = 10
 	game.pause = true
+	game.generation = 0
 
 	game.grid = initGrid(*game)
 	game.grid[5][5] = 1
 	game.grid[5][7] = 1
 	game.grid[5][8] = 1
 	game.grid[4][5] = 1
-
-	rl.InitWindow(game.screenW, game.screenH, "Game of Life")
-	rl.SetTargetFPS(game.fps)
 }
 
 func initGrid(game Game) [][]int32 {
@@ -82,11 +81,12 @@ func drawCells(game *Game) {
 
 func drawUI(game *Game) {
 	// draw pause button
-	pauseX, pauseY, pauseW, pauseH := 400, 500, 80, 30
-	stepX, stepY, stepW, stepH := 500, 500, 80, 30
+	pauseX, pauseY, pauseW, pauseH := 400, game.screenH-40, 80, 30
+	stepX, stepY, stepW, stepH := 500, game.screenH-40, 80, 30
 
 	pauseBtn := rl.Rectangle{X: float32(pauseX), Y: float32(pauseY), Width: float32(pauseW), Height: float32(pauseH)}
 	stepBtn := rl.Rectangle{X: float32(stepX), Y: float32(stepY), Width: float32(stepW), Height: float32(stepH)}
+	restartRect := rl.Rectangle{X: 600.0, Y: float32(game.screenH - 40), Width: 80.0, Height: 30.0}
 
 	var pauseState string
 	if game.pause {
@@ -96,14 +96,18 @@ func drawUI(game *Game) {
 	}
 
 	pause := rg.Button(pauseBtn, pauseState)
+	stepOver := rg.Button(stepBtn, "Step Over")
+	restart := rg.Button(restartRect, "Restart")
+
 	if pause {
 		game.pause = !game.pause
 	}
-
-	stepOver := rg.Button(stepBtn, "Step Over")
 	if stepOver {
 		game.stepOver = true
 		game.pause = false
+	}
+	if restart {
+		game.init()
 	}
 	rl.DrawText(fmt.Sprintf("Live cells: %d", game.liveCellCount), 100, 80, 30, rl.Red)
 	rl.DrawText(fmt.Sprintf("Generation: %d", game.generation), 100, 120, 30, rl.Red)
@@ -175,14 +179,17 @@ func countLiveNeighbor(grid [][]int32, cellx, celly int) int {
 }
 
 func main() {
-	g := Game{}
-	g.init()
+	game := Game{}
+	game.init()
+
+	rl.InitWindow(game.screenW, game.screenH, "Game of Life")
+	rl.SetTargetFPS(game.fps)
 
 	for !rl.WindowShouldClose() {
 		rl.BeginDrawing()
 
-		draw(&g)
-		update(&g)
+		draw(&game)
+		update(&game)
 
 		rl.EndDrawing()
 	}
