@@ -41,10 +41,8 @@ func (game *Game) init() {
 	game.generation = 0
 
 	game.grid = initGrid(*game)
-	game.grid[5][5] = 1
-	game.grid[5][7] = 1
-	game.grid[5][8] = 1
-	game.grid[4][5] = 1
+	game.grid[3][4] = 1
+	game.grid[3][5] = 1
 }
 
 func initGrid(game Game) [][]int32 {
@@ -64,6 +62,7 @@ func draw(game *Game) {
 	drawCells(game)
 	drawGrid(*game)
 	drawUI(game)
+	drawCustomCells(game)
 }
 
 func drawCells(game *Game) {
@@ -113,6 +112,20 @@ func drawUI(game *Game) {
 	rl.DrawText(fmt.Sprintf("Generation: %d", game.generation), 100, 120, 30, rl.Red)
 }
 
+func drawCustomCells(game *Game) {
+	mouse := rl.IsMouseButtonDown(rl.MouseButtonLeft)
+
+	if mouse {
+		pos := rl.GetMousePosition()
+
+		tx := int(pos.X / float32(game.pixelSize))
+		ty := int(pos.Y / float32(game.pixelSize))
+
+		game.grid[tx][ty] = 1
+
+	}
+}
+
 func drawGrid(game Game) {
 	for i := int32(1); i <= game.screenW; i += game.pixelSize {
 		rl.DrawLine(i, 0, i, game.screenH, rl.Black)
@@ -138,20 +151,23 @@ func update(game *Game) {
 	for i := range game.grid {
 		for j := range game.grid[i] {
 			// populated
-			live := countLiveNeighbor(game.grid, i, j)
+			liveCount := countLiveNeighbor(game.grid, i, j)
 
 			if game.grid[i][j] == 1 {
-				if live <= 1 || live >= 4 {
+				if liveCount <= 1 || liveCount >= 4 {
 					currentGrid[i][j] = 0 // kill
+				} else {
+					currentGrid[i][j] = 1 // kill
 				}
 			} else {
-				if live == 3 {
-					currentGrid[i][j] = 1 // born
+				if liveCount == 3 {
+					currentGrid[i][j] = 1 // spawn
 				}
 			}
 		}
 	}
 	game.grid = currentGrid
+
 	if game.stepOver {
 		game.stepOver = false
 		game.pause = true
