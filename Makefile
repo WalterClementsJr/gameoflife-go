@@ -1,5 +1,10 @@
 binary_name = gameoflife
 
+GOOS     := linux windows darwin
+GOARCH   := amd64 arm64
+
+PLATFORMS := $(foreach GOOS,$(GOOS),$(foreach GOARCH,$(GOARCH),$(GOOS)-$(GOARCH)))
+
 .PHONY: tidy
 tidy:
 	go mod tidy -v
@@ -12,7 +17,7 @@ clean:
 
 .PHONY: build
 build:
-	go build -o=./bin/${binary_name} .
+	go build -o ./bin/${binary_name} main.go
 
 .PHONY: run
 run: build
