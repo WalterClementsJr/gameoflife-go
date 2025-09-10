@@ -4,12 +4,16 @@ Conway Game of life in Go & Raylib.
 
 ```sh
 # download dependencies
-go mod download
+dnf install mesa-libGL-devel libXi-devel libXcursor-devel libXrandr-devel libXinerama-devel wayland-devel libxkbcommon-devel
+
+go install
 
 make run
 ```
 
 # TODO
 
-- Port to WASM
+- dynamic view port
+- Port to WASM browser game
+- smooth zoom transition
 
