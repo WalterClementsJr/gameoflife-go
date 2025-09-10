@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - "release/*"
-env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   release:
@@ -16,29 +14,33 @@ jobs:
     outputs:
       timestamp: ${{ steps.get-timestamp.outputs.time }}
     steps:
+      - uses: actions/checkout@v5
       - name: Get build timestamp
         id: get-timestamp
         run: |
           echo "time=$(/bin/date -u "+%Y-%m-%d-%H%M")" >> $GITHUB_OUTPUT
       - name: Generate environmental variables
-        id: generate_env_vars
         run: |
           echo "tag_name=release_${{ steps.get-timestamp.outputs.time }}" >> $GITHUB_OUTPUT
           echo "release_name=GameOfLife_build_${{ steps.get-timestamp.outputs.time }}" >> $GITHUB_OUTPUT
+      - name: Restore build artifacts
+        uses: actions/cache/restore@v4
+        with:
+          path: ./bin
+          key: ${{ github.sha }}-cache
       - run: |
           gh release create ${{ steps.generate_env_vars.outputs.tag_name }} \
             ./bin/* \
             --prerelease \
             --title "${{ steps.generate_env_vars.outputs.release_name }}" \
-            --target "$(git log -1 --format='%H')"
+            --target "$(git log -1 --format='%H')" \
             --notes "Automated release"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build:
-    name: Build binaries and create release
+    name: Build binaries
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
@@ -55,4 +57,9 @@ jobs:
         run: |
           make build
           ls ./bin
+      - name: Cache build
+        uses: actions/cache@v4
+        with:
+          path: ./bin
+          key: ${{ github.sha }}-cache
 
