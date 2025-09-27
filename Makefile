@@ -5,21 +5,23 @@ GOARCH   := amd64 arm64
 
 PLATFORMS := $(foreach GOOS,$(GOOS),$(foreach GOARCH,$(GOARCH),$(GOOS)-$(GOARCH)))
 
-.PHONY: tidy
+.PHONY: tidy clean install build run
+
 tidy:
 	go mod tidy -v
 	go fmt ./...
 
-.PHONY: clean
 clean:
 	go clean
 	/bin/rm -rf ./bin/
 
-.PHONY: build
+install:
+  @sudo apt-get install libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libwayland-dev libxkbcommon-dev
+	@go install
+
 build:
 	go build -o ./bin/${binary_name} main.go
 
-.PHONY: run
 run: build
 	./bin/${binary_name}
 

@@ -2,6 +2,11 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	rg "github.com/gen2brain/raylib-go/raygui"
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -17,11 +22,14 @@ const (
 var CellsColor = rl.Black
 
 type Game struct {
-	screenW    int32
-	screenH    int32
-	fps        int32
-	pixelSize  int32
-	zoomFactor int
+	screenW     int32
+	screenH     int32
+	fps         int32
+	refreshRate int32
+	pixelSize   int32
+	zoomFactor  int
+
+	refreshChan chan bool
 
 	pause    bool
 	stepOver bool
@@ -37,15 +45,30 @@ func (game *Game) init() {
 	game.screenW = ScreenW
 	game.screenH = ScreenH
 	game.pixelSize = SquareSize
+	game.refreshChan = make(chan bool)
+	game.refreshRate = 5
 
-	game.fps = 10
+	timer := time.NewTicker(time.Millisecond * time.Duration(1000/game.refreshRate))
+
+	// emit refresh event
+	go func() {
+		for {
+			<-timer.C
+			log.Println("engine refresh now", time.Now())
+			game.refreshChan <- true
+		}
+	}()
+
+	game.fps = 30
 	game.pause = true
 	game.generation = 0
 	game.zoomFactor = 10
 
 	game.grid = initGrid(*game)
+	// default pattern
 	game.grid[3][4] = 1
 	game.grid[3][5] = 1
+	game.grid[4][4] = 1
 }
 
 func initGrid(game Game) [][]int32 {
@@ -62,23 +85,20 @@ func initGrid(game Game) [][]int32 {
 func draw(game *Game) {
 	rl.ClearBackground(rl.RayWhite)
 
-	drawCells(game)
+	drawCells(*game)
 	drawGrid(*game)
 	drawUI(game)
 	drawCustomCells(game)
 }
 
-func drawCells(game *Game) {
-	var cellCount uint
+func drawCells(game Game) {
 	for i := range game.grid {
 		for j := range game.grid[i] {
 			if game.grid[i][j] == 1 {
 				rl.DrawRectangle(int32(i)*int32(game.zoomFactor), int32(j)*int32(game.zoomFactor), int32(game.zoomFactor), int32(game.zoomFactor), CellsColor)
-				cellCount++
 			}
 		}
 	}
-	game.liveCellCount = cellCount
 }
 
 func drawUI(game *Game) {
@@ -126,6 +146,7 @@ func drawUI(game *Game) {
 	rl.DrawText(fmt.Sprintf("Zoom level: %d", game.zoomFactor), 100, 80+20*4, 30, rl.Red)
 }
 
+// mouse draw
 func drawCustomCells(game *Game) {
 	mouse := rl.IsMouseButtonDown(rl.MouseButtonLeft)
 
@@ -136,7 +157,6 @@ func drawCustomCells(game *Game) {
 		ty := int(pos.Y / float32(game.zoomFactor))
 
 		game.grid[tx][ty] = 1
-
 	}
 }
 
@@ -147,7 +167,7 @@ func drawGrid(game Game) {
 	}
 }
 
-func update(game *Game) {
+func gameUpdate(game *Game) {
 	if game.pause {
 		return
 	}
@@ -162,6 +182,7 @@ func update(game *Game) {
 
 	currentGrid := initGrid(*game)
 
+	var liveCount uint = 0
 	for i := range game.grid {
 		for j := range game.grid[i] {
 			// populated
@@ -171,15 +192,18 @@ func update(game *Game) {
 				if liveCount <= 1 || liveCount >= 4 {
 					currentGrid[i][j] = 0 // kill
 				} else {
-					currentGrid[i][j] = 1 // kill
+					currentGrid[i][j] = 1 // spaw
+					liveCount++
 				}
 			} else {
 				if liveCount == 3 {
 					currentGrid[i][j] = 1 // spawn
+					liveCount++
 				}
 			}
 		}
 	}
+	game.liveCellCount = liveCount
 	game.grid = currentGrid
 
 	if game.stepOver {
@@ -215,15 +239,35 @@ func main() {
 	rl.InitWindow(game.screenW, game.screenH, "Game of Life")
 	rl.SetTargetFPS(game.fps)
 
+	osSignal := make(chan os.Signal, 1)
+	signal.Notify(osSignal, syscall.SIGINT, syscall.SIGTERM)
+	stop := make(chan bool)
+
 	update := func() {
 		rl.BeginDrawing()
-
 		draw(&game)
-		update(&game)
-
 		rl.EndDrawing()
 	}
 
+	// listen to OS signal
+	go func() {
+		<-osSignal
+		stop <- true
+	}()
+	// ignore stop if receive stop signal
+	go func() {
+		<-stop
+		log.Println("Stop signal received")
+		os.Exit(0)
+	}()
+
+	go func() {
+		for {
+			<-game.refreshChan
+			gameUpdate(&game)
+		}
+	}()
+	// draw cells concurrently, signaled by channel
 	for !rl.WindowShouldClose() {
 		update()
 	}
