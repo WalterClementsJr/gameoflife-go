@@ -16,7 +16,7 @@ clean:
 	/bin/rm -rf ./bin/
 
 install:
-  @sudo apt-get install libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libwayland-dev libxkbcommon-dev
+	@sudo apt-get install libgl1-mesa-dev libxi-dev libxcursor-dev libxrandr-dev libxinerama-dev libwayland-dev libxkbcommon-dev
 	@go install
 
 build:

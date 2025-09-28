@@ -3,6 +3,7 @@ name: Build and Release Go Executable
 on:
   push:
     branches:
+      - "master"
       - "release/*"
 
 jobs:
