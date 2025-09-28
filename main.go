@@ -13,10 +13,12 @@ import (
 )
 
 const (
-	ZoomLevel  = 20
-	SquareSize = 40
-	ScreenW    = 1400
-	ScreenH    = 920
+	ZoomLevel                      = 20
+	SquareSize                     = 40
+	ScreenW                        = 1400
+	ScreenH                        = 920
+	pauseX, pauseY, pauseW, pauseH = 400, ScreenH - 40, 80, 30
+	stepX, stepY, stepW, stepH     = 500, ScreenH - 40, 80, 30
 )
 
 var CellsColor = rl.Black
@@ -28,8 +30,6 @@ type Game struct {
 	refreshRate int32
 	pixelSize   int32
 	zoomFactor  int
-
-	refreshChan chan bool
 
 	pause    bool
 	stepOver bool
@@ -45,20 +45,7 @@ func (game *Game) init() {
 	game.screenW = ScreenW
 	game.screenH = ScreenH
 	game.pixelSize = SquareSize
-	game.refreshChan = make(chan bool)
-	game.refreshRate = 5
-
-	timer := time.NewTicker(time.Millisecond * time.Duration(1000/game.refreshRate))
-
-	// emit refresh event
-	go func() {
-		for {
-			<-timer.C
-			log.Println("engine refresh now", time.Now())
-			game.refreshChan <- true
-		}
-	}()
-
+	game.refreshRate = 2
 	game.fps = 30
 	game.pause = true
 	game.generation = 0
@@ -66,9 +53,10 @@ func (game *Game) init() {
 
 	game.grid = initGrid(*game)
 	// default pattern
-	game.grid[3][4] = 1
-	game.grid[3][5] = 1
-	game.grid[4][4] = 1
+	game.grid[13][13] = 1
+	game.grid[13][14] = 1
+	game.grid[13][15] = 1
+	game.grid[14][14] = 1
 }
 
 func initGrid(game Game) [][]int32 {
@@ -85,26 +73,27 @@ func initGrid(game Game) [][]int32 {
 func draw(game *Game) {
 	rl.ClearBackground(rl.RayWhite)
 
-	drawCells(*game)
+	drawCells(game)
 	drawGrid(*game)
 	drawUI(game)
 	drawCustomCells(game)
 }
 
-func drawCells(game Game) {
+func drawCells(game *Game) {
+	var liveCount uint = 0
 	for i := range game.grid {
 		for j := range game.grid[i] {
 			if game.grid[i][j] == 1 {
 				rl.DrawRectangle(int32(i)*int32(game.zoomFactor), int32(j)*int32(game.zoomFactor), int32(game.zoomFactor), int32(game.zoomFactor), CellsColor)
+				liveCount++
 			}
 		}
 	}
+	game.liveCellCount = liveCount
 }
 
 func drawUI(game *Game) {
 	// draw pause button
-	pauseX, pauseY, pauseW, pauseH := 400, game.screenH-40, 80, 30
-	stepX, stepY, stepW, stepH := 500, game.screenH-40, 80, 30
 
 	pauseBtn := rl.Rectangle{X: float32(pauseX), Y: float32(pauseY), Width: float32(pauseW), Height: float32(pauseH)}
 	stepBtn := rl.Rectangle{X: float32(stepX), Y: float32(stepY), Width: float32(stepW), Height: float32(stepH)}
@@ -117,9 +106,14 @@ func drawUI(game *Game) {
 		pauseState = "Pause"
 	}
 
-	pause := rg.Button(pauseBtn, pauseState)
-	stepOver := rg.Button(stepBtn, "Step Over")
-	restart := rg.Button(restartRect, "Restart")
+	isPauseSelected := rg.Button(pauseBtn, pauseState)
+	isStepOverSelected := rg.Button(stepBtn, "Step Over")
+	isRestartSelected := rg.Button(restartRect, "Restart")
+
+	if rl.IsKeyPressed(rl.KeySpace) {
+		log.Println("space detect")
+		game.pause = !game.pause
+	}
 
 	scroll := int(rl.GetMouseWheelMove())
 
@@ -131,14 +125,14 @@ func drawUI(game *Game) {
 		game.zoomFactor = 2
 	}
 
-	if pause {
+	if isPauseSelected {
 		game.pause = !game.pause
 	}
-	if stepOver {
+	if isStepOverSelected {
 		game.stepOver = true
 		game.pause = false
 	}
-	if restart {
+	if isRestartSelected {
 		game.init()
 	}
 	rl.DrawText(fmt.Sprintf("Live cells: %d", game.liveCellCount), 100, 80, 30, rl.Red)
@@ -168,6 +162,7 @@ func drawGrid(game Game) {
 }
 
 func gameUpdate(game *Game) {
+	log.Println("game update time", time.Now())
 	if game.pause {
 		return
 	}
@@ -180,31 +175,31 @@ func gameUpdate(game *Game) {
 	// For a space that is empty or unpopulated:
 	//     Each cell with three neighbors becomes populated.
 
-	currentGrid := initGrid(*game)
+	newGrid := initGrid(*game)
 
 	var liveCount uint = 0
 	for i := range game.grid {
 		for j := range game.grid[i] {
 			// populated
-			liveCount := countLiveNeighbor(game.grid, i, j)
+			liveNeighborCount := countLiveNeighbor(game.grid, i, j)
 
 			if game.grid[i][j] == 1 {
-				if liveCount <= 1 || liveCount >= 4 {
-					currentGrid[i][j] = 0 // kill
+				if liveNeighborCount <= 1 || liveNeighborCount >= 4 {
+					newGrid[i][j] = 0 // kill
 				} else {
-					currentGrid[i][j] = 1 // spaw
+					newGrid[i][j] = 1 // spawn
 					liveCount++
 				}
 			} else {
-				if liveCount == 3 {
-					currentGrid[i][j] = 1 // spawn
+				if liveNeighborCount == 3 {
+					newGrid[i][j] = 1 // spawn
 					liveCount++
 				}
 			}
 		}
 	}
 	game.liveCellCount = liveCount
-	game.grid = currentGrid
+	game.grid = newGrid
 
 	if game.stepOver {
 		game.stepOver = false
@@ -228,7 +223,6 @@ func countLiveNeighbor(grid [][]int32, cellx, celly int) int {
 			count += int(grid[tx][ty])
 		}
 	}
-
 	return count
 }
 
@@ -236,12 +230,10 @@ func main() {
 	game := Game{}
 	game.init()
 
+	updateTicker := time.NewTicker(time.Millisecond * time.Duration(1000/game.refreshRate))
+
 	rl.InitWindow(game.screenW, game.screenH, "Game of Life")
 	rl.SetTargetFPS(game.fps)
-
-	osSignal := make(chan os.Signal, 1)
-	signal.Notify(osSignal, syscall.SIGINT, syscall.SIGTERM)
-	stop := make(chan bool)
 
 	update := func() {
 		rl.BeginDrawing()
@@ -249,26 +241,22 @@ func main() {
 		rl.EndDrawing()
 	}
 
+	osSignal := make(chan os.Signal, 1)
+	signal.Notify(osSignal, syscall.SIGINT, syscall.SIGTERM)
+
 	// listen to OS signal
 	go func() {
 		<-osSignal
-		stop <- true
-	}()
-	// ignore stop if receive stop signal
-	go func() {
-		<-stop
 		log.Println("Stop signal received")
 		os.Exit(0)
 	}()
 
-	go func() {
-		for {
-			<-game.refreshChan
-			gameUpdate(&game)
-		}
-	}()
-	// draw cells concurrently, signaled by channel
 	for !rl.WindowShouldClose() {
+		select {
+		case <-updateTicker.C:
+			gameUpdate(&game)
+		default:
+		}
 		update()
 	}
 }
